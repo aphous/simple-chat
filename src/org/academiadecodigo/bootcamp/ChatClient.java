@@ -5,84 +5,155 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class ChatClient {
 
     private Socket clientSocket;
-    private PrintWriter out;
-    private BufferedReader in;
-    private int port;
-    private String hostName;
-    private String username;
 
     public static void main(String[] args) {
 
         ChatClient client = new ChatClient();
-        BufferedReader r = new BufferedReader(new InputStreamReader(System.in));
 
         try {
-
-            client.getClientInput(r);
 
             client.start();
 
-            client.sendMessage(r);
-
         } catch (IOException e) {
-            System.out.println("Error");
-        } finally {
-            client.close(r);
-            System.out.println("Bye Bye");
+            System.out.println("Client Error - " + e.getMessage());
+            e.printStackTrace();
         }
-
     }
 
-    private void start() throws IOException {
+    public void start() throws IOException {
+
+        BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+
+        String hostName = setHostInput(reader);
+        int port = setPortInput(reader);
 
         clientSocket = new Socket(hostName, port);
+        System.out.println("Connection to Server Success");
 
-        out = new PrintWriter(clientSocket.getOutputStream(), true);
-        in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+        ExecutorService service = Executors.newSingleThreadExecutor();
+        PrintWriter outStream = new PrintWriter(clientSocket.getOutputStream(), true);
+        BufferedReader inStream = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
 
+        setUsernameInput(reader, outStream);
+
+        service.submit(new ClientReceive(inStream));
+        sendMessage(reader, outStream);
+
+        close(reader);
     }
 
-    private void getClientInput(BufferedReader r) throws IOException {
-
+    private String setHostInput(BufferedReader reader) throws IOException {
         System.out.print("HostName: ");
-        this.hostName = r.readLine();
+        return reader.readLine();
+    }
 
+    private int setPortInput(BufferedReader reader) throws IOException {
         System.out.print("Port: ");
-        this.port = Integer.parseInt(r.readLine());
-
-        System.out.print("Username: ");
-        this.username = r.readLine();
-
+        return Integer.parseInt(reader.readLine());
     }
 
-    private void sendMessage(BufferedReader r) throws IOException {
+    private void setUsernameInput(BufferedReader reader, PrintWriter out) throws IOException {
 
-        String line;
-        String message;
-        System.out.println("Chat open");
+        String username = null;
+        boolean usernameOK = false;
 
-        while(!(line = r.readLine()).equals(":q")) {
-            message = username + ": " + line;
-            out.println(message);
-            System.out.println(in.readLine());
+        while(!usernameOK) {
+
+            System.out.print("Username: ");
+            username = reader.readLine();
+
+            if(username.length()<=20){
+                usernameOK = true;
+            } else {
+                System.out.println("Username invalid, too long, 10 words max");
+            }
         }
+        out.println(username);
     }
 
-    private void close(BufferedReader r) {
+    private void sendMessage(BufferedReader reader, PrintWriter outStream) {
+
+        System.out.println("Connected to Chat");
+        String line = "";
+
+        while (!line.equals("/quit")) {
+
+            try {
+
+                line = reader.readLine();
+                outStream.println(line);
+
+            } catch (IOException ex) {
+
+                System.out.println("Sending error: " + ex.getMessage() + ", closing client...");
+                break;
+
+            }
+        }
+
+    }
+
+    private void close(BufferedReader reader) {
 
         try {
-            System.out.println("Closing");
-            clientSocket.close();
-            in.close();
-            out.close();
-            r.close();
+
+            if(reader!=null) {
+                reader.close();
+                System.out.println("Closed reader");
+            }
+
+            if(clientSocket!=null) {
+                clientSocket.close();
+                System.out.println("Closed Socket");
+            }
+
+            System.out.println("Bye bye");
+            System.exit(0);
+
         } catch (IOException e) {
             System.out.println("Closing Error");
+            System.exit(-1);
         }
     }
 
+
+    public class ClientReceive implements Runnable {
+
+        private BufferedReader inStream;
+
+        public ClientReceive(BufferedReader inStream) {
+            this.inStream=inStream;
+        }
+
+        @Override
+        public void run() {
+
+            String line;
+
+            try {
+
+                while(true){
+
+                    line = inStream.readLine();
+
+                    if(line == null){
+                        System.out.println("Server closed");
+                        break;
+                    }
+
+                    System.out.println(line);
+
+                }
+
+            } catch (IOException e) {
+                System.out.println("Server closed - " + e.getMessage());
+            }
+        }
+    }
 }
