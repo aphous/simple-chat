@@ -36,7 +36,7 @@ public class ChatClient {
         clientSocket = new Socket(hostName, port);
         System.out.println("Connection to Server Success");
 
-        ExecutorService service = Executors.newSingleThreadExecutor();
+        ExecutorService service = Executors.newFixedThreadPool(10);
         PrintWriter outStream = new PrintWriter(clientSocket.getOutputStream(), true);
         BufferedReader inStream = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
 
